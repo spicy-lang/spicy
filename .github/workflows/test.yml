@@ -2,9 +2,8 @@ name: test
 
 on:
   push:
-    branches:
-      - master
-      - main
+    branches: ['main']
+
   pull_request:
 
 jobs:
@@ -12,12 +11,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3.5.3
-      - uses: erlef/setup-beam@v1.16.0
+      - uses: denoland/setup-deno@v1.1.2
+      - uses: erlef/setup-beam@v1
         with:
-          otp-version: "26.0.2"
+          deno-version: v1.x
+          otp-version: false
           gleam-version: "0.30.5"
-          rebar3-version: "3"
-          # elixir-version: "1.15.4"
       - run: gleam format --check src test
       - run: gleam deps download
       - run: gleam test
