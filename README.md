@@ -13,6 +13,11 @@ A statically typed general-purpose programming language with both compilation an
 
 ## Roadmap
 
-* [ ] Lexer
+* [X] Lexer
+    * [X] Tokens
+    * [X] Utilities: Lexer Helper
+    * [X] Lexer
+    * [X] Write Tests for Lexer
+* [ ] Create a simple CLI 
 * [ ] Parser
 * [ ] AST
