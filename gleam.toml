@@ -10,7 +10,6 @@ target = "javascript"
 [dependencies]
 gleam_stdlib = "~> 0.30"
 simplifile = "~> 0.1.14"
-glint = "~> 0.12.0-rc6"
 
 
 [dev-dependencies]
