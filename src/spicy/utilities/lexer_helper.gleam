@@ -38,7 +38,8 @@ pub fn is_name_grapheme(grapheme: String) -> Bool {
     | "7"
     | "8"
     | "9"
-    | "-" -> True
+    | "-"
+    | "_" -> True
 
     _ -> False
   }
