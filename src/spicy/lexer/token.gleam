@@ -14,6 +14,7 @@ pub type Token {
   Typename(String)
   Constname(String)
   Name(String)
+  DiscardName(String)
 
   // ----------------
   // Arithmetic Operators

@@ -6,17 +6,15 @@ import spicy/lexer/token.{Token}
 import spicy/utilities/lexer_helper
 
 pub type Position {
-  Position(line: Int, column: Int)
+  Position(Int)
 }
 
-// The Lexer type keeps track of the current position in the source string,
-// as well as the line and column for error reporting.
 pub opaque type Lexer {
-  Lexer(source: String, position: Int, line: Int, column: Int)
+  Lexer(source: String, position: Int)
 }
 
 pub fn new(source: String) -> Lexer {
-  Lexer(source: source, position: 0, line: 1, column: 1)
+  Lexer(source: source, position: 0)
 }
 
 pub fn iterator(lexer: Lexer) -> Iterator(Token) {
@@ -46,6 +44,69 @@ pub fn next(lexer: Lexer) -> #(Lexer, Token) {
 
     "--" <> rest -> comment(rest, lexer.position, 2, token.Comment)
 
+    // Groupings
+    "(" <> rest -> #(advance(lexer, rest, 1), token.OpenParen)
+    ")" <> rest -> #(advance(lexer, rest, 1), token.CloseParen)
+    "[" <> rest -> #(advance(lexer, rest, 1), token.OpenSquare)
+    "]" <> rest -> #(advance(lexer, rest, 1), token.CloseSquare)
+    "{" <> rest -> #(advance(lexer, rest, 1), token.OpenBrace)
+    "}" <> rest -> #(advance(lexer, rest, 1), token.CloseBrace)
+    // Punctuation
+    "|>" <> rest -> #(advance(lexer, rest, 2), token.PipeOperator)
+    ":" <> rest -> #(advance(lexer, rest, 1), token.Colon)
+    "->" <> rest -> #(advance(lexer, rest, 2), token.Arrow)
+    "_" <> rest -> #(advance(lexer, rest, 1), token.Discard)
+    "," <> rest -> #(advance(lexer, rest, 1), token.Comma)
+    ";" <> rest -> #(advance(lexer, rest, 1), token.Semicolon)
+    "'" <> rest -> #(advance(lexer, rest, 1), token.SingleQuote)
+    "@" <> rest -> #(advance(lexer, rest, 1), token.At)
+    "#" <> rest -> #(advance(lexer, rest, 1), token.Dash)
+    "&" <> rest -> #(advance(lexer, rest, 1), token.And)
+    "." <> rest -> #(advance(lexer, rest, 1), token.Dot)
+    "=" <> rest -> #(advance(lexer, rest, 1), token.Equal)
+    "!=" <> rest -> #(advance(lexer, rest, 2), token.NotEqual)
+    ">=" <> rest -> #(advance(lexer, rest, 2), token.GreaterEqual)
+    "<=" <> rest -> #(advance(lexer, rest, 2), token.LessEqual)
+    ">" <> rest -> #(advance(lexer, rest, 1), token.Greater)
+    "<" <> rest -> #(advance(lexer, rest, 1), token.Less)
+    "!" <> rest -> #(advance(lexer, rest, 1), token.Exclamation)
+
+    // Arithmetic Operators
+    "+" <> rest -> #(advance(lexer, rest, 1), token.Plus)
+    "-" <> rest -> #(advance(lexer, rest, 1), token.Minus)
+    "*" <> rest -> #(advance(lexer, rest, 1), token.Star)
+    "/" <> rest -> #(advance(lexer, rest, 1), token.Slash)
+    "%" <> rest -> #(advance(lexer, rest, 1), token.Modulo)
+
+    // Strings
+    "\"" <> rest -> lex_string(rest, "", lexer.position)
+
+    // Discard
+    "_" <> rest -> {
+      let #(name, rest) = take_content(rest, "", lexer_helper.is_name_grapheme)
+
+      #(
+        Lexer(rest, lexer.position + byte_size(name)),
+        token(lexer, token.DiscardName(name)),
+      )
+    }
+
+    // Integers
+    "0b" <> source -> lex_binary(source, "0b", lexer.position)
+    "0o" <> source -> lex_octal(source, "0o", lexer.position)
+    "0x" <> source -> lex_hexadecimal(source, "0x", lexer.position)
+
+    "0" <> source -> lex_number(source, "0", LexInt, lexer.position)
+    "1" <> source -> lex_number(source, "1", LexInt, lexer.position)
+    "2" <> source -> lex_number(source, "2", LexInt, lexer.position)
+    "3" <> source -> lex_number(source, "3", LexInt, lexer.position)
+    "4" <> source -> lex_number(source, "4", LexInt, lexer.position)
+    "5" <> source -> lex_number(source, "5", LexInt, lexer.position)
+    "6" <> source -> lex_number(source, "6", LexInt, lexer.position)
+    "7" <> source -> lex_number(source, "7", LexInt, lexer.position)
+    "8" <> source -> lex_number(source, "8", LexInt, lexer.position)
+    "9" <> source -> lex_number(source, "9", LexInt, lexer.position)
+
     "a" <> _
     | "b" <> _
     | "c" <> _
@@ -74,7 +135,6 @@ pub fn next(lexer: Lexer) -> #(Lexer, Token) {
     | "z" <> _ -> {
       let #(name, rest) =
         take_content(lexer.source, "", lexer_helper.is_name_grapheme)
-
       let as_token = case name {
         "const" -> token.Const
         "external" -> token.External
@@ -114,7 +174,7 @@ pub fn next(lexer: Lexer) -> #(Lexer, Token) {
       }
 
       // Everything else becomes a Name token
-      #(Lexer(rest, lexer.position + byte_size(name), 1, 1), as_token)
+      #(Lexer(rest, lexer.position + byte_size(name)), as_token)
     }
 
     "A" <> _
@@ -146,64 +206,8 @@ pub fn next(lexer: Lexer) -> #(Lexer, Token) {
       let #(name, rest) =
         take_content(lexer.source, "", lexer_helper.is_typename_grapheme)
       let as_token = token.Typename(name)
-      #(
-        Lexer(rest, lexer.position + byte_size(name), 1, 1),
-        token(lexer, as_token),
-      )
+      #(Lexer(rest, lexer.position + byte_size(name)), token(lexer, as_token))
     }
-
-    // Strings
-    "\"" <> rest -> lex_string(rest, "", lexer.position)
-    // Integers
-    "0b" <> source -> lex_binary(source, "0b", lexer.position)
-    "0o" <> source -> lex_octal(source, "0o", lexer.position)
-    "0x" <> source -> lex_hexadecimal(source, "0x", lexer.position)
-
-    "0" <> source -> lex_number(source, "0", LexInt, lexer.position)
-    "1" <> source -> lex_number(source, "1", LexInt, lexer.position)
-    "2" <> source -> lex_number(source, "2", LexInt, lexer.position)
-    "3" <> source -> lex_number(source, "3", LexInt, lexer.position)
-    "4" <> source -> lex_number(source, "4", LexInt, lexer.position)
-    "5" <> source -> lex_number(source, "5", LexInt, lexer.position)
-    "6" <> source -> lex_number(source, "6", LexInt, lexer.position)
-    "7" <> source -> lex_number(source, "7", LexInt, lexer.position)
-    "8" <> source -> lex_number(source, "8", LexInt, lexer.position)
-    "9" <> source -> lex_number(source, "9", LexInt, lexer.position)
-    // Comparison Operators
-    "=" <> rest -> #(advance(lexer, rest, 1), token.Equal)
-    "!=" <> rest -> #(advance(lexer, rest, 2), token.NotEqual)
-    ">=" <> rest -> #(advance(lexer, rest, 2), token.GreaterEqual)
-    "<=" <> rest -> #(advance(lexer, rest, 2), token.LessEqual)
-    ">" <> rest -> #(advance(lexer, rest, 1), token.Greater)
-    "<" <> rest -> #(advance(lexer, rest, 1), token.Less)
-
-    // Groupings
-    "(" <> rest -> #(advance(lexer, rest, 1), token.OpenParen)
-    ")" <> rest -> #(advance(lexer, rest, 1), token.CloseParen)
-    "[" <> rest -> #(advance(lexer, rest, 1), token.OpenSquare)
-    "]" <> rest -> #(advance(lexer, rest, 1), token.CloseSquare)
-    "{" <> rest -> #(advance(lexer, rest, 1), token.OpenBrace)
-    "}" <> rest -> #(advance(lexer, rest, 1), token.CloseBrace)
-    // Punctuation
-    "|>" <> rest -> #(advance(lexer, rest, 2), token.PipeOperator)
-    ":" <> rest -> #(advance(lexer, rest, 1), token.Colon)
-    "->" <> rest -> #(advance(lexer, rest, 2), token.Arrow)
-    "_" <> rest -> #(advance(lexer, rest, 1), token.Discard)
-    "!" <> rest -> #(advance(lexer, rest, 1), token.Exclamation)
-    "," <> rest -> #(advance(lexer, rest, 1), token.Comma)
-    ";" <> rest -> #(advance(lexer, rest, 1), token.Semicolon)
-    "'" <> rest -> #(advance(lexer, rest, 1), token.SingleQuote)
-    "@" <> rest -> #(advance(lexer, rest, 1), token.At)
-    "#" <> rest -> #(advance(lexer, rest, 1), token.Dash)
-    "&" <> rest -> #(advance(lexer, rest, 1), token.And)
-    "." <> rest -> #(advance(lexer, rest, 1), token.Dot)
-    // Arithmetic Operators
-    "+" <> rest -> #(advance(lexer, rest, 1), token.Plus)
-    "-" <> rest -> #(advance(lexer, rest, 1), token.Minus)
-    "*" <> rest -> #(advance(lexer, rest, 1), token.Star)
-    "/" <> rest -> #(advance(lexer, rest, 1), token.Slash)
-    "%" <> rest -> #(advance(lexer, rest, 1), token.Modulo)
-
     _ -> {
       case string.pop_grapheme(lexer.source) {
         // End Of File
@@ -218,44 +222,13 @@ pub fn next(lexer: Lexer) -> #(Lexer, Token) {
 }
 
 // Advance the lexer's position by a given number of characters
-fn advance(lexer: Lexer, rest: String, number: Int) -> Lexer {
-  let new_position = lexer.position + number
-  let #(new_line, new_column) = update_line_column(lexer, number)
-  Lexer(
-    source: rest,
-    position: new_position,
-    line: new_line,
-    column: new_column,
-  )
+fn advance(lexer: Lexer, source: String, offset: Int) -> Lexer {
+  Lexer(source: source, position: lexer.position + offset)
 }
 
 // Returns the byte size of a given string. Useful for advancing the lexer's position.
 fn byte_size(string: String) -> Int {
   bit_string.byte_size(<<string:utf8>>)
-}
-
-// Update line and column based on processed characters
-fn update_line_column(lexer: Lexer, number: Int) -> #(Int, Int) {
-  let substring = string.slice(lexer.source, lexer.position, number)
-
-  // Split the substring by newlines and count the parts
-  let parts = string.split(substring, "\n")
-  let newline_count = list.length(parts) - 1
-
-  let new_line = lexer.line + newline_count
-
-  // Extract the last part from the parts list or provide a default value
-  let last_part = case list.last(parts) {
-    Ok(part) -> part
-    Error(_) -> ""
-  }
-
-  let new_column = case newline_count {
-    0 -> lexer.column + number
-    _ -> byte_size(last_part)
-  }
-
-  #(new_line, new_column)
 }
 
 pub fn take_while(
@@ -276,7 +249,7 @@ pub fn take_while(
 // by the given `skip` amount and increments the line count.
 fn newline(lexer: Lexer, src: String, size: Int) -> #(Lexer, Token) {
   let start = lexer.position
-  case consume_whitespace(Lexer(src, start + size, 1, 1)) {
+  case consume_whitespace(Lexer(src, start + size)) {
     #(lexer, True) -> #(lexer, token.EmptyLine)
     #(lexer, False) -> next(lexer)
   }
@@ -284,11 +257,11 @@ fn newline(lexer: Lexer, src: String, size: Int) -> #(Lexer, Token) {
 
 // Consumes whitespace characters from the lexer's current position
 // until a non-whitespace character is encountered.
-fn consume_whitespace(lexer: Lexer) -> #(Lexer, Bool) {
+pub fn consume_whitespace(lexer: Lexer) -> #(Lexer, Bool) {
   case lexer.source {
     "" | "\n" <> _ | "\r\n" <> _ -> #(lexer, True)
-    " " <> rest -> consume_whitespace(Lexer(rest, lexer.position + 1, 1, 1))
-    "\t" <> rest -> consume_whitespace(Lexer(rest, lexer.position + 1, 1, 1))
+    " " <> rest -> consume_whitespace(Lexer(rest, lexer.position + 1))
+    "\t" <> rest -> consume_whitespace(Lexer(rest, lexer.position + 1))
     _ -> #(lexer, False)
   }
 }
@@ -297,11 +270,11 @@ fn consume_whitespace(lexer: Lexer) -> #(Lexer, Bool) {
 // Advances the lexer's position past the comment.
 fn comment(src: String, start: Int, size: Int, token: Token) -> #(Lexer, Token) {
   case src {
-    "\n" <> _ -> #(Lexer(src, start + size, 1, 1), token)
-    "\r\n" <> _ -> #(Lexer(src, start + size, 1, 1), token)
+    "\n" <> _ -> #(Lexer(src, start + size), token)
+    "\r\n" <> _ -> #(Lexer(src, start + size), token)
     _ -> {
       case string.pop_grapheme(src) {
-        Error(_) -> #(Lexer(src, start + size, 1, 1), token)
+        Error(_) -> #(Lexer(src, start + size), token)
         Ok(#(char, rest)) -> comment(rest, start, size + byte_size(char), token)
       }
     }
@@ -336,7 +309,7 @@ fn lex_string(input: String, content: String, start: Int) -> #(Lexer, Token) {
   case input {
     // A double quote, the string is terminated
     "\"" <> rest -> {
-      let lexer = Lexer(rest, start + byte_size(content) + 2, 1, 1)
+      let lexer = Lexer(rest, start + byte_size(content) + 2)
       #(lexer, token.String(content))
     }
 
@@ -355,7 +328,7 @@ fn lex_string(input: String, content: String, start: Int) -> #(Lexer, Token) {
 
         // End of input, the string is unterminated
         Error(_) -> {
-          let lexer = Lexer("", start + byte_size(content) + 1, 1, 1)
+          let lexer = Lexer("", start + byte_size(content) + 1)
           #(lexer, token.UnterminatedString(content))
         }
       }
@@ -401,7 +374,7 @@ fn lex_number(
 
     // Anything else and the number is terminated
     source -> {
-      let lexer = Lexer(source, start + byte_size(content), 1, 1)
+      let lexer = Lexer(source, start + byte_size(content))
       let token = case mode {
         LexInt -> token.Int(content)
         LexFloat | LexFloatExponent -> token.Float(content)
@@ -417,7 +390,7 @@ fn lex_binary(source: String, content: String, start: Int) -> #(Lexer, Token) {
     "0" <> source -> lex_binary(source, content <> "0", start)
     "1" <> source -> lex_binary(source, content <> "1", start)
     source -> {
-      let lexer = Lexer(source, start + byte_size(content), 1, 1)
+      let lexer = Lexer(source, start + byte_size(content))
       #(lexer, token.Int(content))
     }
   }
@@ -435,7 +408,7 @@ fn lex_octal(source: String, content: String, start: Int) -> #(Lexer, Token) {
     "6" <> source -> lex_octal(source, content <> "6", start)
     "7" <> source -> lex_octal(source, content <> "7", start)
     source -> {
-      let lexer = Lexer(source, start + byte_size(content), 1, 1)
+      let lexer = Lexer(source, start + byte_size(content))
       #(lexer, token.Int(content))
     }
   }
@@ -465,7 +438,7 @@ fn lex_hexadecimal(
     "E" <> source -> lex_hexadecimal(source, content <> "E", start)
     "F" <> source -> lex_hexadecimal(source, content <> "F", start)
     source -> {
-      let lexer = Lexer(source, start + byte_size(content), 1, 1)
+      let lexer = Lexer(source, start + byte_size(content))
       #(lexer, token.Int(content))
     }
   }
